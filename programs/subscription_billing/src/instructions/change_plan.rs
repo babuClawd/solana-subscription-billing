@@ -13,7 +13,7 @@ pub struct ChangePlan<'info> {
         seeds = [Merchant::SEED_PREFIX, merchant.authority.as_ref()],
         bump = merchant.bump,
     )]
-    pub merchant: Account<'info, Merchant>,
+    pub merchant: Box<Account<'info, Merchant>>,
 
     /// The current plan the subscriber is on.
     #[account(
@@ -26,7 +26,7 @@ pub struct ChangePlan<'info> {
         ],
         bump = current_plan.bump,
     )]
-    pub current_plan: Account<'info, Plan>,
+    pub current_plan: Box<Account<'info, Plan>>,
 
     /// The new plan the subscriber wants to switch to.
     #[account(
@@ -39,7 +39,7 @@ pub struct ChangePlan<'info> {
         ],
         bump = new_plan.bump,
     )]
-    pub new_plan: Account<'info, Plan>,
+    pub new_plan: Box<Account<'info, Plan>>,
 
     #[account(
         mut,
@@ -53,7 +53,7 @@ pub struct ChangePlan<'info> {
         ],
         bump = subscription.bump,
     )]
-    pub subscription: Account<'info, Subscription>,
+    pub subscription: Box<Account<'info, Subscription>>,
 
     /// New subscription account for the new plan.
     #[account(
@@ -67,7 +67,7 @@ pub struct ChangePlan<'info> {
         payer = subscriber,
         space = 8 + Subscription::INIT_SPACE,
     )]
-    pub new_subscription: Account<'info, Subscription>,
+    pub new_subscription: Box<Account<'info, Subscription>>,
 
     /// Invoice for the plan change.
     #[account(
@@ -81,14 +81,14 @@ pub struct ChangePlan<'info> {
         payer = subscriber,
         space = 8 + Invoice::INIT_SPACE,
     )]
-    pub invoice: Account<'info, Invoice>,
+    pub invoice: Box<Account<'info, Invoice>>,
 
     #[account(
         mut,
         seeds = [MerchantStats::SEED_PREFIX, merchant.key().as_ref()],
         bump = stats.bump,
     )]
-    pub stats: Account<'info, MerchantStats>,
+    pub stats: Box<Account<'info, MerchantStats>>,
 
     #[account(
         mut,
@@ -137,7 +137,7 @@ pub fn handler(ctx: Context<ChangePlan>) -> Result<()> {
 
     // Calculate prorated credit from remaining time on current plan.
     // credit = (remaining_seconds / total_interval) * current_price
-    let period_start = old_sub
+    let _period_start = old_sub
         .current_period_end
         .checked_sub(current_plan.interval_seconds)
         .ok_or(BillingError::Overflow)?;

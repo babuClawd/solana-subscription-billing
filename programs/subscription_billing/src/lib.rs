@@ -6,7 +6,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("11111111111111111111111111111111"); // Will be replaced after keygen
+declare_id!("2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o"); // Will be replaced after keygen
 
 #[program]
 pub mod subscription_billing {
