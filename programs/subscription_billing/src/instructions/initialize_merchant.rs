@@ -43,7 +43,6 @@ pub struct InitializeMerchant<'info> {
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn handler(ctx: Context<InitializeMerchant>, name: String) -> Result<()> {

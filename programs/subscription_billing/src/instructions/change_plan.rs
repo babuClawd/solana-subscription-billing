@@ -137,10 +137,6 @@ pub fn handler(ctx: Context<ChangePlan>) -> Result<()> {
 
     // Calculate prorated credit from remaining time on current plan.
     // credit = (remaining_seconds / total_interval) * current_price
-    let _period_start = old_sub
-        .current_period_end
-        .checked_sub(current_plan.interval_seconds)
-        .ok_or(BillingError::Overflow)?;
     let remaining = old_sub
         .current_period_end
         .checked_sub(now)

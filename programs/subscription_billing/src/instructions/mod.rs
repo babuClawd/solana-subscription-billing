@@ -1,5 +1,3 @@
-#![allow(ambiguous_glob_reexports)]
-
 pub mod initialize_merchant;
 pub mod create_plan;
 pub mod update_plan;
@@ -11,13 +9,13 @@ pub mod change_plan;
 pub mod close_subscription;
 pub mod withdraw;
 
-pub use initialize_merchant::*;
-pub use create_plan::*;
-pub use update_plan::*;
-pub use deactivate_plan::*;
-pub use subscribe::*;
-pub use renew::*;
 pub use cancel::*;
 pub use change_plan::*;
 pub use close_subscription::*;
+pub use create_plan::*;
+pub use deactivate_plan::*;
+pub use initialize_merchant::*;
+pub use renew::*;
+pub use subscribe::*;
+pub use update_plan::*;
 pub use withdraw::*;
