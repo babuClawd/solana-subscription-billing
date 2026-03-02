@@ -1,196 +1,370 @@
 # Solana Subscription Billing
 
-> A production-grade on-chain subscription billing system rebuilt from Web2 patterns (Stripe/Recurly) as a Solana program in Rust.
+> A production-grade on-chain subscription billing system built with Anchor on Solana — the Web3 equivalent of Stripe Billing / Recurly.
 
-**Built for the [Superteam Poland Bounty](https://superteam.fun/earn/listing/rebuild-production-backend-systems-as-on-chain-rust-programs): Rebuild Production Backend Systems as On-Chain Rust Programs**
+**Program ID:** `2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o`  
+**Network:** Devnet  
+**Deploy Tx:** [`VY8opF1hSNNA...`](https://explorer.solana.com/tx/VY8opF1hSNNAfz8TVq7QvsFjJT7nAuQhDG6sU92Mpb5LMdnzFMN84yCcssZ8rtFMRTBDvfpDKoD99X8iUS4j31f?cluster=devnet)  
+**Explorer:** [View Program](https://explorer.solana.com/address/2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o?cluster=devnet)
 
-## Overview
+---
 
-This project demonstrates how traditional SaaS subscription billing — the backbone of services like Stripe Billing, Recurly, and Chargebee — can be rebuilt as a trustless, transparent on-chain system using Solana's account model and the Anchor framework.
+## Table of Contents
 
-## How It Works in Web2
+- [Architecture: Web2 vs Solana](#architecture-web2-vs-solana)
+- [Account Model](#account-model)
+- [Instructions](#instructions)
+- [Design Decisions & Tradeoffs](#design-decisions--tradeoffs)
+- [Getting Started](#getting-started)
+- [CLI Client](#cli-client)
+- [Testing](#testing)
+- [Project Structure](#project-structure)
 
-Traditional subscription billing (e.g., Stripe) relies on:
+---
 
-| Component | Web2 Implementation |
-|-----------|-------------------|
-| **Customer Data** | PostgreSQL rows with encrypted payment methods |
-| **Plans/Prices** | Database records with pricing tiers |
-| **Subscriptions** | Stateful records managed by a billing engine |
-| **Recurring Charges** | Background workers + payment processor APIs |
-| **Invoices** | Generated documents stored in object storage |
-| **Webhooks** | HTTP callbacks for state change notifications |
-| **Analytics** | Data warehouse aggregations |
+## Architecture: Web2 vs Solana
 
-**Architecture:**
+### The Web2 System (Stripe Billing / Recurly)
+
+A traditional subscription billing backend looks like this:
+
 ```
-Customer → REST API → Billing Engine → PostgreSQL
-                    ↓                    ↓
-              Payment Processor     Webhook System
-              (Stripe/Braintree)    (HTTP callbacks)
-                    ↓
-              Invoice Generation
+┌──────────────────────────────────────────────────────────┐
+│                    APPLICATION SERVER                      │
+│                                                           │
+│  ┌─────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
+│  │ REST API │  │  Webhook  │  │  Cron    │  │  Admin   │ │
+│  │ Gateway  │  │  Handler  │  │  Jobs    │  │  Panel   │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘ │
+│       │              │              │              │       │
+│  ┌────┴──────────────┴──────────────┴──────────────┴───┐ │
+│  │              BUSINESS LOGIC LAYER                    │ │
+│  │  • Subscription state machine                        │ │
+│  │  • Proration calculator                              │ │
+│  │  • Invoice generator                                 │ │
+│  │  • Payment retry logic                               │ │
+│  └──────────────────────┬──────────────────────────────┘ │
+│                          │                                │
+│  ┌──────────────────────┴──────────────────────────────┐ │
+│  │              DATA LAYER (PostgreSQL)                  │ │
+│  │  merchants | plans | subscriptions | invoices | ...   │ │
+│  └──────────────────────┬──────────────────────────────┘ │
+│                          │                                │
+│  ┌──────────────────────┴──────────────────────────────┐ │
+│  │           EXTERNAL SERVICES                          │ │
+│  │  Stripe API  │  PayPal  │  Email  │  Analytics       │ │
+│  └──────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
+
+Trust model: You trust the server operator.
+Payment flow: Server → Stripe API → Card network → Bank → Settlement (2-7 days)
+State: Mutable database rows, single source of truth
+Audit: Application-level logs (can be tampered with)
 ```
 
-## How It Works on Solana
+**Key components:**
+| Component | Role |
+|-----------|------|
+| PostgreSQL tables | Merchants, plans, subscriptions, invoices, payments |
+| Cron jobs | Process renewals, expire grace periods, retry failed payments |
+| Webhook handlers | Receive payment confirmations from Stripe/PayPal |
+| Business logic | State machine transitions, proration math, retry policies |
+| Admin panel | Manual overrides, refunds, customer management |
 
-Every component maps to an on-chain equivalent:
+### The Solana On-Chain Version
 
-| Web2 | Solana Equivalent |
-|------|------------------|
-| Customer database row | Subscriber's wallet (Pubkey) |
-| Plan/Price record | Plan PDA account |
-| Subscription record | Subscription PDA account |
-| Payment processing | SPL Token CPI transfer |
-| Invoice document | Invoice PDA (immutable receipt) |
-| Webhooks | Program events (logs) |
-| Analytics dashboard | MerchantStats PDA account |
-| Auth/sessions | Ed25519 signatures |
-| Cron billing | Cranker pattern (external trigger) |
-
-**Architecture:**
 ```
-Subscriber Wallet → Subscribe IX → Subscription PDA created
-                                 → SPL Token transfer to Treasury PDA
-                                 → Invoice PDA created
-                                 → Event emitted
+┌───────────────────────────────────────────────────────────┐
+│                 SOLANA BLOCKCHAIN                          │
+│                                                           │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │        SUBSCRIPTION BILLING PROGRAM (BPF)           │ │
+│  │                                                     │ │
+│  │  Instructions:                                      │ │
+│  │  ┌────────────┐ ┌───────────┐ ┌──────────────────┐ │ │
+│  │  │ initialize │ │  create   │ │    subscribe     │ │ │
+│  │  │ _merchant  │ │  _plan    │ │ renew / cancel   │ │ │
+│  │  └────────────┘ └───────────┘ │ change / close   │ │ │
+│  │                               │ withdraw          │ │ │
+│  │                               └──────────────────┘ │ │
+│  │                                                     │ │
+│  │  PDA Accounts (on-chain state):                     │ │
+│  │  ┌──────────┐ ┌──────┐ ┌──────────────┐ ┌───────┐ │ │
+│  │  │ Merchant │ │ Plan │ │ Subscription │ │Invoice│ │ │
+│  │  │  Stats   │ │      │ │              │ │       │ │ │
+│  │  └──────────┘ └──────┘ └──────────────┘ └───────┘ │ │
+│  └─────────────────────────────────────────────────────┘ │
+│                                                           │
+│  SPL Token CPI: Direct token transfers, no intermediary   │
+│  Settlement: Instant (within same transaction)            │
+│  Audit: Every state change = immutable on-chain tx        │
+└───────────────────────────────────────────────────────────┘
 
-Cranker/Subscriber → Renew IX → Time check (Clock sysvar)
-                              → Payment transferred
-                              → Period extended
-                              → Invoice PDA created
+┌───────────────────────────────────────────────────────────┐
+│                    CLIENT LAYER                            │
+│  ┌──────────┐  ┌──────────┐  ┌────────────────────────┐ │
+│  │ CLI Tool │  │ TS SDK   │  │ Crank bot (off-chain)  │ │
+│  └──────────┘  └──────────┘  │ triggers renewals      │ │
+│                               └────────────────────────┘ │
+└───────────────────────────────────────────────────────────┘
+
+Trust model: Trust the code (verified, immutable).
+Payment flow: Subscriber wallet → Treasury PDA (instant, atomic)
+State: PDA accounts, deterministic addresses, globally readable
+Audit: Every transaction is an immutable, public record
 ```
+
+### Side-by-Side Comparison
+
+| Aspect | Web2 (Stripe/Recurly) | Solana On-Chain |
+|--------|----------------------|-----------------|
+| **State storage** | PostgreSQL rows | PDA accounts (Merchant, Plan, Subscription, Invoice, Stats) |
+| **Payment processing** | Stripe API → card networks (2-7 day settlement) | SPL Token CPI transfer (instant, atomic, ~400ms) |
+| **Trust model** | Trust the operator + payment processor | Trust the code — verified, open-source, immutable |
+| **Subscription state machine** | Application code (can have bugs, can be changed) | On-chain program (auditable, deterministic) |
+| **Invoices** | Database records (mutable, deletable) | On-chain accounts (immutable receipts) |
+| **Proration** | Server-side calculation (opaque) | On-chain calculation (transparent, verifiable) |
+| **Renewals** | Cron jobs + webhooks | Permissionless cranking (anyone can trigger) |
+| **Merchant analytics** | SQL queries on application DB | MerchantStats PDA (real-time, on-chain) |
+| **Access control** | JWT/API keys, RBAC middleware | PDA seeds + signer verification (cryptographic) |
+| **Audit trail** | Application logs (tamperable) | Blockchain transactions (immutable) |
+| **Downtime** | Server outages affect billing | Solana network uptime (~99.9%) |
+| **Cost per operation** | Server hosting + Stripe fees (2.9% + $0.30) | Transaction fee (~$0.00025) + rent (~$0.002/account) |
+| **Chargebacks** | Major pain point (fraud, disputes) | Impossible — payments are pre-authorized |
+| **Multi-currency** | Complex FX + settlement | Any SPL token (USDC, USDT, custom) — same code |
+| **Scalability** | Vertical scaling, DB sharding | Horizontal (accounts are independent, parallel tx) |
+
+### What's Gained
+
+1. **Zero payment processor fees** — No Stripe 2.9%. Just ~$0.00025 per tx.
+2. **Instant settlement** — No waiting 2-7 days for bank transfers.
+3. **Immutable invoices** — Every payment is a permanent on-chain receipt.
+4. **Permissionless integration** — Anyone can build on top, read state, trigger renewals.
+5. **No chargebacks** — Payments are cryptographically authorized.
+6. **Transparent proration** — Math is on-chain, verifiable by anyone.
+7. **Global by default** — No geographic restrictions on merchants or subscribers.
+
+### What's Lost (Tradeoffs)
+
+1. **No automatic recurring charges** — Web2 systems pull from saved cards. On-chain requires subscriber to sign each renewal (or delegate via a crank bot).
+2. **Account rent costs** — Each PDA costs ~0.002 SOL in rent. At scale, this is significant.
+3. **No built-in dispute resolution** — Web2 has chargeback systems (imperfect but they exist).
+4. **UX friction** — Subscribers need wallets and tokens. No "enter credit card."
+5. **Upgrade complexity** — Program upgrades require careful migration (Web2: just deploy new code).
+6. **Stack size limits** — Solana's 4KB stack forces boxing of large account structs.
+
+---
 
 ## Account Model
 
-```
-Merchant PDA ──────── ["merchant", authority]
-├── MerchantStats PDA ── ["stats", merchant]
-├── Treasury PDA ──────── ["treasury", merchant]  (Token Account)
-└── Plan PDA ──────────── ["plan", merchant, plan_id]
-    └── Subscription PDA ── ["subscription", plan, subscriber]
-        └── Invoice PDA ──── ["invoice", subscription, payment_number]
-```
-
-### State Machine
+Five PDA account types, all deterministically derived:
 
 ```
-                 subscribe()
-                    │
-                    ▼
-              ┌──────────┐
-              │  Active   │◄──── renew() (payment succeeds)
-              └────┬──────┘
-                   │
-          ┌────────┼────────┐
-          │        │        │
-     cancel()   period   grace period
-          │     expires    expires
-          ▼        ▼        ▼
-    ┌───────────┐ ┌──────────┐
-    │ Cancelled │ │ PastDue  │──── renew() fails ──→ Cancelled
-    └───────────┘ └──────────┘
+Merchant ["merchant", authority]
+    ├── Plan ["plan", merchant, plan_id_bytes]       (N plans per merchant)
+    │     └── Subscription ["subscription", plan, subscriber]
+    │           └── Invoice ["invoice", subscription, payment_number_bytes]
+    ├── MerchantStats ["stats", merchant]
+    └── Treasury ["treasury", merchant]              (SPL token account)
 ```
+
+### Account Sizes
+
+| Account | Fields | Size (bytes) | Rent (SOL) |
+|---------|--------|-------------|------------|
+| Merchant | authority, mint, treasury, name(32), plan_count, bump | ~145 | ~0.0018 |
+| Plan | merchant, plan_id, name(32), price, intervals, flags, bump | ~130 | ~0.0016 |
+| Subscription | subscriber, plan, merchant, timestamps, status, bump | ~122 | ~0.0015 |
+| Invoice | subscription, plan, amount, timestamps, number, bump | ~113 | ~0.0014 |
+| MerchantStats | merchant, revenue, counters, bump | ~81 | ~0.0010 |
+
+---
 
 ## Instructions
 
-| Instruction | Signer | Description |
-|------------|--------|-------------|
-| `initialize_merchant` | Merchant | Creates merchant, stats, and treasury accounts |
-| `create_plan` | Merchant | Creates a subscription plan with pricing & interval |
-| `update_plan` | Merchant | Updates plan parameters (future subscribers only) |
-| `deactivate_plan` | Merchant | Stops accepting new subscribers |
-| `subscribe` | Customer | Subscribes to plan, pays first cycle |
-| `renew` | Customer/Cranker | Processes renewal payment when period ends |
-| `cancel` | Customer | Cancels subscription (active until period end) |
-| `change_plan` | Customer | Upgrades/downgrades with prorated credit |
-| `close_subscription` | Customer | Closes expired account, reclaims rent |
-| `withdraw` | Merchant | Withdraws collected payments from treasury |
+| # | Instruction | Who Signs | What It Does |
+|---|------------|-----------|-------------|
+| 1 | `initialize_merchant` | Merchant authority | Creates Merchant + Stats + Treasury accounts |
+| 2 | `create_plan` | Merchant authority | Creates a new subscription Plan |
+| 3 | `update_plan` | Merchant authority | Updates price/interval/grace/max (future subs only) |
+| 4 | `deactivate_plan` | Merchant authority | Stops new subscriptions on this plan |
+| 5 | `subscribe` | Subscriber | Creates Subscription + first Invoice, pays first cycle |
+| 6 | `renew` | Subscriber (+ payer) | Pays next cycle, extends period, creates Invoice |
+| 7 | `cancel` | Subscriber | Disables auto-renew, marks as Cancelled |
+| 8 | `change_plan` | Subscriber | Prorated upgrade/downgrade between plans |
+| 9 | `close_subscription` | Subscriber | Reclaims rent from expired/cancelled subscription |
+| 10 | `withdraw` | Merchant authority | Transfers tokens from treasury to destination |
 
-## Tradeoffs & Constraints
+### Subscription State Machine
 
-| Aspect | Web2 | Solana | Tradeoff |
-|--------|------|--------|----------|
-| **Latency** | <100ms API response | ~400ms confirmation | Slower but trustless |
-| **Cost per operation** | Free (absorbed by SaaS) | ~0.00025 SOL per tx | Minimal, predictable |
-| **Billing automation** | Server-side cron | Requires external cranker | No native scheduling |
-| **Privacy** | Data encrypted at rest | All data public on-chain | Not suitable for PII |
-| **Refunds** | Instant via payment processor | Requires merchant cooperation | No chargebacks |
-| **Scalability** | Millions of subs per DB | Account size limits apply | ~10K subs per plan practical |
-| **Composability** | APIs, webhooks | Any program can CPI | Natively interoperable |
-| **Trust model** | Trust the company | Trust the code | Verifiable, auditable |
-| **Time precision** | Millisecond cron | Slot-based (~400ms blocks) | Sufficient for billing |
-| **Storage** | Cheap (pennies/GB) | Expensive (rent) | Close accounts to reclaim |
+```
+                 subscribe()
+                     │
+                     ▼
+                 ┌────────┐
+      renew() ──▶│ Active │◀── renew() (reactivates from PastDue)
+                 └───┬────┘
+                     │ period expires
+                     ▼
+                ┌──────────┐
+                │ PastDue  │─── grace period expires ──▶ auto-cancel
+                └────┬─────┘
+                     │ cancel() or grace expires
+                     ▼
+               ┌───────────┐
+               │ Cancelled │──── close_subscription() ──▶ account closed
+               └───────────┘
+```
 
-## Tech Stack
+---
 
-- **On-chain program:** Rust + Anchor Framework 0.31.0
-- **Token standard:** SPL Token (USDC compatible)
-- **Client SDK:** TypeScript (Anchor generated)
-- **CLI:** TypeScript + Commander.js
-- **Testing:** Anchor test framework (Mocha/Chai)
+## Design Decisions & Tradeoffs
+
+### 1. SOL-less Renewal Design (Cranker Pattern)
+The `renew` instruction separates `subscriber` (who authorizes the token transfer) from `payer` (who pays the tx fee + invoice rent). This enables **crank bots** — off-chain services that trigger renewals on behalf of subscribers, paying the gas fees.
+
+**Web2 equivalent:** Stripe's background payment retry system.
+
+### 2. Prorated Plan Changes
+`change_plan` calculates credit from unused time on the old plan and applies it to the new plan price. This is the same proration model Stripe uses, but computed transparently on-chain.
+
+### 3. Immutable Invoices
+Each payment creates a new Invoice PDA (keyed by subscription + payment number). These are **append-only** — once created, they can never be modified. This provides an auditable payment history without relying on off-chain databases.
+
+### 4. PDA-Owned Treasury
+The treasury is a token account owned by the Merchant PDA (not the merchant's wallet). This means funds can only be withdrawn through the program's `withdraw` instruction, which enforces that only the authorized merchant wallet can access funds.
+
+### 5. Account Boxing for Stack Safety
+Solana enforces a 4KB stack limit per frame. The `ChangePlan` instruction requires 11 accounts — exceeding this limit. We use `Box<Account<...>>` to move large account structs to the heap, reducing the stack footprint by ~1KB.
+
+### 6. MerchantStats as Separate PDA
+Instead of adding counters to the Merchant account, stats live in a separate `MerchantStats` PDA. This keeps the Merchant account small and separates concerns — merchant config vs analytics.
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust 1.93+
-- Solana CLI 3.0+
-- Anchor CLI 0.31.0
-- Node.js 18+
+- [Rust](https://rustup.rs/) (1.79+)
+- [Solana CLI](https://docs.solanalabs.com/cli/install) (v2.1.0 recommended)
+- [Anchor](https://www.anchor-lang.com/docs/installation) (v0.31.0)
+- [Node.js](https://nodejs.org/) (v18+)
 
 ### Build
 
 ```bash
-anchor build
+# Clone
+git clone https://github.com/babuClawd/solana-subscription-billing.git
+cd solana-subscription-billing
+
+# Build the SBF binary
+export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/bin:$PATH"
+cargo-build-sbf --manifest-path programs/subscription_billing/Cargo.toml --sbf-out-dir target/deploy
+
+# Note: `anchor build` may fail at IDL generation due to anchor-syn/host-rustc
+# incompatibility. The SBF binary builds correctly. IDL is provided in target/idl/.
 ```
 
-### Test
+### Deploy
 
 ```bash
-anchor test
+solana config set --url devnet
+solana airdrop 5  # Need ~3.5 SOL for program deploy
+solana program deploy target/deploy/subscription_billing.so
 ```
 
-### Deploy to Devnet
+### Known Build Issues
+
+The Solana SBF toolchain ships rustc 1.79, which doesn't support Rust Edition 2024. Some transitive dependencies (`blake3`, `constant_time_eq`) have released versions requiring edition2024. We pin these in `Cargo.toml`:
+
+```toml
+blake3 = "=1.5.5"
+constant_time_eq = "=0.3.1"
+```
+
+Additionally, `indexmap`, `borsh`, and `proc-macro-crate` may need downgrading in `Cargo.lock`:
+```bash
+cargo update borsh@1.6.0 --precise 1.5.5
+cargo update proc-macro-crate@3.4.0 --precise 3.2.0
+cargo update indexmap@2.13.0 --precise 2.7.0
+```
+
+---
+
+## CLI Client
 
 ```bash
-anchor deploy --provider.cluster devnet
+cd client
+npm install
 ```
 
-## Devnet Deployment
+### Quick Demo
 
-- **Program ID:** `TBD`
-- **Transaction Links:** `TBD`
+Run the full end-to-end demo (creates mint, merchant, plan, subscribes):
+
+```bash
+npx ts-node src/index.ts demo
+```
+
+### Individual Commands
+
+```bash
+# Initialize merchant
+npx ts-node src/index.ts init-merchant --name "My SaaS" --mint <USDC_MINT>
+
+# Create a plan (price in atomic units, interval in seconds)
+npx ts-node src/index.ts create-plan --name "Pro Monthly" --price 10000000 --interval 2592000
+
+# Subscribe to a plan
+npx ts-node src/index.ts subscribe --merchant <MERCHANT_PDA> --plan <PLAN_PDA>
+
+# Cancel subscription
+npx ts-node src/index.ts cancel --merchant <MERCHANT_PDA> --plan <PLAN_PDA>
+
+# Withdraw treasury funds
+npx ts-node src/index.ts withdraw --amount 5000000 --destination <TOKEN_ACCOUNT>
+
+# View merchant info
+npx ts-node src/index.ts show-merchant
+
+# View plan details
+npx ts-node src/index.ts show-plan --plan <PLAN_PDA>
+
+# View subscription
+npx ts-node src/index.ts show-subscription --subscription <SUB_PDA>
+```
+
+---
 
 ## Project Structure
 
 ```
-├── programs/subscription_billing/src/
-│   ├── lib.rs                    # Program entrypoint & instruction dispatch
-│   ├── state/                    # Account definitions
-│   │   ├── merchant.rs           # Merchant account
-│   │   ├── plan.rs               # Plan account
-│   │   ├── subscription.rs       # Subscription account + status enum
-│   │   ├── invoice.rs            # Invoice account
-│   │   └── merchant_stats.rs     # Analytics account
-│   ├── instructions/             # Instruction handlers
-│   │   ├── initialize_merchant.rs
-│   │   ├── create_plan.rs
-│   │   ├── update_plan.rs
-│   │   ├── deactivate_plan.rs
-│   │   ├── subscribe.rs
-│   │   ├── renew.rs
-│   │   ├── cancel.rs
-│   │   ├── change_plan.rs
-│   │   ├── close_subscription.rs
-│   │   └── withdraw.rs
-│   └── errors/                   # Custom error codes
-│       └── codes.rs
-├── tests/                        # Integration tests
-├── app/                          # TypeScript SDK & CLI
-└── Anchor.toml
+solana-subscription-billing/
+├── programs/
+│   └── subscription_billing/
+│       └── src/
+│           ├── lib.rs              # Program entry, instruction routing
+│           ├── state/              # Account definitions (Merchant, Plan, Subscription, Invoice, Stats)
+│           ├── instructions/       # Instruction handlers (10 instructions)
+│           └── errors/             # Custom error codes
+├── client/
+│   └── src/
+│       └── index.ts               # TypeScript CLI client
+├── target/
+│   ├── deploy/                    # Compiled .so binary + keypair
+│   └── idl/                       # Program IDL (JSON)
+├── Anchor.toml                    # Anchor configuration
+├── Cargo.toml                     # Workspace config + dependency pins
+└── README.md                      # This file
 ```
+
+---
 
 ## License
 
 MIT
+
+---
+
+Built by [@babuClawd](https://github.com/babuClawd) for the [Superteam Earn bounty](https://superteam.fun/earn/listing/rebuild-production-backend-systems-as-on-chain-rust-programs).

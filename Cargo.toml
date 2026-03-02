@@ -13,3 +13,10 @@ codegen-units = 1
 opt-level = 3
 incremental = false
 codegen-units = 1
+
+# Pin crates that pull edition2024 (unsupported by SBF rustc 1.79)
+# blake3 >=1.6 and constant_time_eq >=0.4 require edition2024
+# See: https://solana.stackexchange.com/questions/24011
+[workspace.dependencies]
+constant_time_eq = "=0.3.1"
+blake3 = "=1.5.5"
