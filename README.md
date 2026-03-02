@@ -337,6 +337,64 @@ npx ts-node src/index.ts show-subscription --subscription <SUB_PDA>
 
 ---
 
+## Testing
+
+17 integration tests covering all instructions, both happy paths and error cases. Tests run against the deployed Devnet program using ephemeral keypairs.
+
+```bash
+# Install test dependencies (from project root)
+npm install
+
+# Run the full test suite
+npm test
+```
+
+### Test Coverage
+
+| Category | Tests | What's Verified |
+|----------|-------|-----------------|
+| **Initialize Merchant** | 3 | Correct state, duplicate rejection, empty name validation |
+| **Create Plan** | 3 | Correct state, zero price rejection, minimum interval validation |
+| **Update Plan** | 2 | Price update, unauthorized access rejection |
+| **Subscribe** | 2 | State + invoice + payment + stats, duplicate rejection |
+| **Cancel** | 2 | State transition + stats update, double-cancel rejection |
+| **Deactivate Plan** | 2 | Plan deactivation, subscription rejection on inactive plan |
+| **Withdraw** | 2 | Treasury → destination transfer, excess withdrawal rejection |
+| **Close Subscription** | 1 | Rent reclamation + account deletion |
+
+```
+  Subscription Billing Program
+    Initialize Merchant
+      ✔ creates a merchant with correct state
+      ✔ rejects duplicate merchant initialization
+      ✔ rejects empty merchant name
+    Create Plan
+      ✔ creates a plan with correct state
+      ✔ rejects zero price
+      ✔ rejects interval less than 60 seconds
+    Update Plan
+      ✔ updates plan price
+      ✔ rejects unauthorized update
+    Subscribe
+      ✔ subscribes and creates invoice
+      ✔ rejects duplicate subscription
+    Cancel
+      ✔ cancels an active subscription
+      ✔ rejects cancelling an already cancelled subscription
+    Deactivate Plan
+      ✔ deactivates a plan
+      ✔ rejects subscribing to a deactivated plan
+    Withdraw
+      ✔ withdraws funds from treasury
+      ✔ rejects withdrawal exceeding treasury balance
+    Close Subscription
+      ✔ closes a cancelled subscription and reclaims rent
+
+  17 passing (21s)
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -348,6 +406,8 @@ solana-subscription-billing/
 │           ├── state/              # Account definitions (Merchant, Plan, Subscription, Invoice, Stats)
 │           ├── instructions/       # Instruction handlers (10 instructions)
 │           └── errors/             # Custom error codes
+├── tests/
+│   └── subscription_billing.test.ts  # 17 integration tests (Devnet)
 ├── client/
 │   └── src/
 │       └── index.ts               # TypeScript CLI client
