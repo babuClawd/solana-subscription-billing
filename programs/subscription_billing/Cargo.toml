@@ -1,0 +1,20 @@
+[package]
+name = "subscription-billing"
+version = "0.1.0"
+description = "On-chain subscription billing system for Solana"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "subscription_billing"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = { version = "0.31.0", features = ["init-if-needed"] }
+anchor-spl = "0.31.0"
