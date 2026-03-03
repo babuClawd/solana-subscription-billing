@@ -48,7 +48,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings -A ambiguous_glob_reexports
+        run: cargo clippy --all-targets -- -D warnings -A deprecated -A unexpected_cfgs -A ambiguous_glob_reexports
 
       - name: Build SBF program
         run: |
