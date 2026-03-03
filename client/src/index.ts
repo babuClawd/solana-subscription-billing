@@ -109,13 +109,13 @@ function getConnection(rpcUrl?: string): Connection {
 }
 
 function loadIdl(): SubscriptionBillingIDL {
-  const idlPath = path.resolve(
-    __dirname,
-    "../../target/idl/subscription_billing.json"
-  );
+  // Try committed idl/ first, then fall back to target/idl/ (local builds)
+  const idlDir = path.resolve(__dirname, "../../idl/subscription_billing.json");
+  const idlTarget = path.resolve(__dirname, "../../target/idl/subscription_billing.json");
+  const idlPath = fs.existsSync(idlDir) ? idlDir : idlTarget;
   if (!fs.existsSync(idlPath)) {
     throw new Error(
-      `IDL not found at ${idlPath}\n` +
+      `IDL not found. Looked in:\n  ${idlDir}\n  ${idlTarget}\n` +
         `Ensure the project is built (see README for build instructions).`
     );
   }

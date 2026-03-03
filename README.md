@@ -7,6 +7,16 @@
 **Deploy Tx:** [`VY8opF1hSNNA...`](https://explorer.solana.com/tx/VY8opF1hSNNAfz8TVq7QvsFjJT7nAuQhDG6sU92Mpb5LMdnzFMN84yCcssZ8rtFMRTBDvfpDKoD99X8iUS4j31f?cluster=devnet)  
 **Explorer:** [View Program](https://explorer.solana.com/address/2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o?cluster=devnet)
 
+### Devnet Demo Transactions
+
+| Action | Transaction | Accounts |
+|--------|-------------|----------|
+| **Initialize Merchant** | [`2cJVUQ6E...`](https://explorer.solana.com/tx/2cJVUQ6EsgjUZEYKWJ4s7stLau3kUKkWrtoWxb7ZtfdNYBTM4XFM2tfzDzpmjsJtRin6xVACUMMPQ9ggh4zByZ8s?cluster=devnet) | [Merchant](https://explorer.solana.com/address/7Jqrycs2QMkTc5yx9mBNBkugBVRKHDV7npeT7zbGzEBP?cluster=devnet) |
+| **Create Plan** | [`3Mghnt4U...`](https://explorer.solana.com/tx/3Mghnt4UQ4CVvhNVmna9yyneod2Pa8WDsL8v4MWc5ZK2zAuukUPARkomjdLpvtoifBsJ9WYUQLQBfRMGbMMtuNZ9?cluster=devnet) | [Plan](https://explorer.solana.com/address/8Cvx5sW7iJfYm9mcZ9eAZ6X5RLDWokMHn3AfG7nSVe8Z?cluster=devnet) |
+| **Subscribe + Pay** | [`36qqqeg5...`](https://explorer.solana.com/tx/36qqqeg5DVVuC2veA4Pz2Qx4yRMNsuK9Hb6Dv2a1botkHDQrBjspPytuVc3jRWkratMmtdMGkitWEp2f3u8Wezca?cluster=devnet) | [Subscription](https://explorer.solana.com/address/9M5HEuJgdqAgf3fzLRiG68zegPQZGwrfnUu5gfhE4VTP?cluster=devnet) |
+
+> All transactions are live on Devnet. Click to inspect accounts, instruction data, and token transfers on Solana Explorer.
+
 ---
 
 ## Table of Contents
@@ -263,7 +273,7 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/b
 cargo-build-sbf --manifest-path programs/subscription_billing/Cargo.toml --sbf-out-dir target/deploy
 
 # Note: `anchor build` may fail at IDL generation due to anchor-syn/host-rustc
-# incompatibility. The SBF binary builds correctly. IDL is provided in target/idl/.
+# incompatibility. The SBF binary builds correctly. IDL is committed in idl/.
 ```
 
 ### Deploy
@@ -406,16 +416,16 @@ solana-subscription-billing/
 │           ├── state/              # Account definitions (Merchant, Plan, Subscription, Invoice, Stats)
 │           ├── instructions/       # Instruction handlers (10 instructions)
 │           └── errors/             # Custom error codes
+├── idl/
+│   └── subscription_billing.json  # Program IDL (committed for client/test use)
 ├── tests/
 │   └── subscription_billing.test.ts  # 17 integration tests (Devnet)
 ├── client/
 │   └── src/
 │       └── index.ts               # TypeScript CLI client
-├── target/
-│   ├── deploy/                    # Compiled .so binary + keypair
-│   └── idl/                       # Program IDL (JSON)
 ├── Anchor.toml                    # Anchor configuration
 ├── Cargo.toml                     # Workspace config + dependency pins
+├── LICENSE                        # MIT License
 └── README.md                      # This file
 ```
 
@@ -424,6 +434,21 @@ solana-subscription-billing/
 ## License
 
 MIT
+
+---
+
+## Security Considerations
+
+This program is deployed on **Devnet only** and has not been audited. Key security measures implemented:
+
+- **Access control:** All merchant operations enforce `has_one = authority` via PDA seeds
+- **Overflow protection:** All arithmetic uses `checked_add`/`checked_sub` with explicit error handling
+- **PDA-owned treasury:** Funds can only be withdrawn through program-authorized CPI transfers
+- **Input validation:** Plan names (1-32 chars), prices (> 0), intervals (≥ 60s), grace periods (≥ 0)
+- **State machine enforcement:** Subscriptions follow Active → PastDue → Cancelled transitions; invalid transitions are rejected
+- **Immutable invoices:** Once created, invoice data cannot be modified
+
+**Not yet implemented:** Verifiable build, on-chain IDL upload, multisig upgrade authority. These would be required before mainnet deployment.
 
 ---
 

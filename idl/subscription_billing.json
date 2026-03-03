@@ -1,0 +1,1599 @@
+{
+  "address": "2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o",
+  "metadata": {
+    "name": "subscription_billing",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "On-chain subscription billing system for Solana"
+  },
+  "instructions": [
+    {
+      "name": "initialize_merchant",
+      "discriminator": [
+        7,
+        90,
+        74,
+        38,
+        99,
+        111,
+        142,
+        77
+      ],
+      "accounts": [
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_mint"
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "create_plan",
+      "discriminator": [
+        77,
+        43,
+        141,
+        254,
+        212,
+        118,
+        41,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "plan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.plan_count"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "interval_seconds",
+          "type": "i64"
+        },
+        {
+          "name": "grace_period_seconds",
+          "type": "i64"
+        },
+        {
+          "name": "max_subscribers",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_plan",
+      "discriminator": [
+        119,
+        112,
+        58,
+        60,
+        76,
+        205,
+        1,
+        100
+      ],
+      "accounts": [
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "plan",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_price",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "new_interval",
+          "type": {
+            "option": "i64"
+          }
+        },
+        {
+          "name": "new_grace_period",
+          "type": {
+            "option": "i64"
+          }
+        },
+        {
+          "name": "new_max_subscribers",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "deactivate_plan",
+      "discriminator": [
+        91,
+        38,
+        214,
+        232,
+        172,
+        21,
+        30,
+        93
+      ],
+      "accounts": [
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "plan",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "subscribe",
+      "discriminator": [
+        254,
+        28,
+        191,
+        138,
+        156,
+        179,
+        183,
+        53
+      ],
+      "accounts": [
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "plan",
+          "writable": true
+        },
+        {
+          "name": "subscription",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "stats",
+          "writable": true
+        },
+        {
+          "name": "subscriber_token_account",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "subscriber",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "renew",
+      "discriminator": [
+        43,
+        239,
+        15,
+        46,
+        27,
+        7,
+        163,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "plan"
+        },
+        {
+          "name": "subscription",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "stats",
+          "writable": true
+        },
+        {
+          "name": "subscriber_token_account",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "subscriber",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel",
+      "discriminator": [
+        232,
+        219,
+        223,
+        41,
+        219,
+        236,
+        220,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "plan",
+          "writable": true
+        },
+        {
+          "name": "subscription",
+          "writable": true
+        },
+        {
+          "name": "stats",
+          "writable": true
+        },
+        {
+          "name": "subscriber",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "change_plan",
+      "discriminator": [
+        75,
+        206,
+        141,
+        79,
+        34,
+        245,
+        125,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "current_plan",
+          "writable": true
+        },
+        {
+          "name": "new_plan",
+          "writable": true
+        },
+        {
+          "name": "subscription",
+          "writable": true
+        },
+        {
+          "name": "new_subscription",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "stats",
+          "writable": true
+        },
+        {
+          "name": "subscriber_token_account",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "subscriber",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_subscription",
+      "discriminator": [
+        33,
+        214,
+        169,
+        135,
+        35,
+        127,
+        78,
+        7
+      ],
+      "accounts": [
+        {
+          "name": "plan"
+        },
+        {
+          "name": "subscription",
+          "writable": true
+        },
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "subscriber",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "destination",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Merchant",
+      "discriminator": [
+        71,
+        235,
+        30,
+        40,
+        231,
+        21,
+        32,
+        64
+      ]
+    },
+    {
+      "name": "MerchantStats",
+      "discriminator": [
+        165,
+        194,
+        124,
+        199,
+        93,
+        23,
+        251,
+        150
+      ]
+    },
+    {
+      "name": "Plan",
+      "discriminator": [
+        161,
+        231,
+        251,
+        119,
+        2,
+        12,
+        162,
+        2
+      ]
+    },
+    {
+      "name": "Subscription",
+      "discriminator": [
+        64,
+        7,
+        26,
+        135,
+        102,
+        132,
+        98,
+        33
+      ]
+    },
+    {
+      "name": "Invoice",
+      "discriminator": [
+        51,
+        194,
+        250,
+        114,
+        6,
+        104,
+        18,
+        164
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "MerchantInitialized",
+      "discriminator": [
+        96,
+        0,
+        189,
+        109,
+        128,
+        70,
+        106,
+        89
+      ],
+      "fields": [
+        {
+          "name": "merchant",
+          "type": "pubkey"
+        },
+        {
+          "name": "authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "paymentMint",
+          "type": "pubkey"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "PlanCreated",
+      "discriminator": [
+        215,
+        11,
+        135,
+        121,
+        208,
+        119,
+        149,
+        149
+      ],
+      "fields": [
+        {
+          "name": "merchant",
+          "type": "pubkey"
+        },
+        {
+          "name": "plan",
+          "type": "pubkey"
+        },
+        {
+          "name": "planId",
+          "type": "u64"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "intervalSeconds",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "PlanUpdated",
+      "discriminator": [
+        49,
+        51,
+        198,
+        31,
+        170,
+        70,
+        253,
+        195
+      ],
+      "fields": [
+        {
+          "name": "plan",
+          "type": "pubkey"
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "intervalSeconds",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "PlanDeactivated",
+      "discriminator": [
+        221,
+        150,
+        97,
+        183,
+        178,
+        79,
+        11,
+        75
+      ],
+      "fields": [
+        {
+          "name": "plan",
+          "type": "pubkey"
+        },
+        {
+          "name": "merchant",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "SubscriptionCreated",
+      "discriminator": [
+        215,
+        63,
+        169,
+        25,
+        179,
+        200,
+        180,
+        105
+      ],
+      "fields": [
+        {
+          "name": "subscription",
+          "type": "pubkey"
+        },
+        {
+          "name": "subscriber",
+          "type": "pubkey"
+        },
+        {
+          "name": "plan",
+          "type": "pubkey"
+        },
+        {
+          "name": "merchant",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "periodEnd",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "PaymentProcessed",
+      "discriminator": [
+        22,
+        109,
+        191,
+        213,
+        83,
+        63,
+        120,
+        219
+      ],
+      "fields": [
+        {
+          "name": "subscription",
+          "type": "pubkey"
+        },
+        {
+          "name": "subscriber",
+          "type": "pubkey"
+        },
+        {
+          "name": "plan",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "invoice",
+          "type": "pubkey"
+        },
+        {
+          "name": "periodStart",
+          "type": "i64"
+        },
+        {
+          "name": "periodEnd",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "SubscriptionCancelled",
+      "discriminator": [
+        158,
+        216,
+        233,
+        205,
+        138,
+        62,
+        176,
+        239
+      ],
+      "fields": [
+        {
+          "name": "subscription",
+          "type": "pubkey"
+        },
+        {
+          "name": "subscriber",
+          "type": "pubkey"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "SubscriptionCancelledEvent",
+      "discriminator": [
+        10,
+        87,
+        228,
+        73,
+        76,
+        115,
+        135,
+        170
+      ],
+      "fields": [
+        {
+          "name": "subscription",
+          "type": "pubkey"
+        },
+        {
+          "name": "subscriber",
+          "type": "pubkey"
+        },
+        {
+          "name": "plan",
+          "type": "pubkey"
+        },
+        {
+          "name": "effectiveUntil",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "PlanChanged",
+      "discriminator": [
+        183,
+        244,
+        86,
+        213,
+        42,
+        210,
+        217,
+        72
+      ],
+      "fields": [
+        {
+          "name": "oldSubscription",
+          "type": "pubkey"
+        },
+        {
+          "name": "newSubscription",
+          "type": "pubkey"
+        },
+        {
+          "name": "subscriber",
+          "type": "pubkey"
+        },
+        {
+          "name": "oldPlan",
+          "type": "pubkey"
+        },
+        {
+          "name": "newPlan",
+          "type": "pubkey"
+        },
+        {
+          "name": "credit",
+          "type": "u64"
+        },
+        {
+          "name": "charge",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "WithdrawalProcessed",
+      "discriminator": [
+        127,
+        92,
+        169,
+        199,
+        212,
+        241,
+        193,
+        65
+      ],
+      "fields": [
+        {
+          "name": "merchant",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "destination",
+          "type": "pubkey"
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidPlanName",
+      "msg": "Plan name must be between 1 and 32 characters"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidMerchantName",
+      "msg": "Merchant name must be between 1 and 32 characters"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidPrice",
+      "msg": "Price must be greater than zero"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidInterval",
+      "msg": "Billing interval must be at least 60 seconds"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidGracePeriod",
+      "msg": "Grace period cannot be negative"
+    },
+    {
+      "code": 6005,
+      "name": "PlanNotActive",
+      "msg": "Plan is not active and cannot accept new subscribers"
+    },
+    {
+      "code": 6006,
+      "name": "PlanAtCapacity",
+      "msg": "Plan has reached its maximum subscriber limit"
+    },
+    {
+      "code": 6007,
+      "name": "SubscriptionNotActive",
+      "msg": "Subscription is not active"
+    },
+    {
+      "code": 6008,
+      "name": "RenewalNotDue",
+      "msg": "Subscription is not due for renewal yet"
+    },
+    {
+      "code": 6009,
+      "name": "AlreadyCancelled",
+      "msg": "Subscription has already been cancelled"
+    },
+    {
+      "code": 6010,
+      "name": "SubscriptionStillActive",
+      "msg": "Subscription is still active and cannot be closed"
+    },
+    {
+      "code": 6011,
+      "name": "GracePeriodNotExpired",
+      "msg": "Grace period has not expired yet"
+    },
+    {
+      "code": 6012,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds for payment"
+    },
+    {
+      "code": 6013,
+      "name": "InsufficientTreasuryBalance",
+      "msg": "Withdrawal amount exceeds treasury balance"
+    },
+    {
+      "code": 6014,
+      "name": "Unauthorized",
+      "msg": "Unauthorized: signer is not the expected authority"
+    },
+    {
+      "code": 6015,
+      "name": "PlanMerchantMismatch",
+      "msg": "New plan must belong to the same merchant"
+    },
+    {
+      "code": 6016,
+      "name": "SamePlan",
+      "msg": "Cannot change to the same plan"
+    },
+    {
+      "code": 6017,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Merchant",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "plan_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantStats",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_revenue",
+            "type": "u64"
+          },
+          {
+            "name": "active_subscribers",
+            "type": "u64"
+          },
+          {
+            "name": "total_invoices",
+            "type": "u64"
+          },
+          {
+            "name": "total_subscriptions",
+            "type": "u64"
+          },
+          {
+            "name": "total_cancellations",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Plan",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan_id",
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "interval_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "grace_period_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          },
+          {
+            "name": "max_subscribers",
+            "type": "u64"
+          },
+          {
+            "name": "subscriber_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Subscription",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "current_period_end",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "SubscriptionStatus"
+              }
+            }
+          },
+          {
+            "name": "payments_made",
+            "type": "u64"
+          },
+          {
+            "name": "auto_renew",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Invoice",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "paid_at",
+            "type": "i64"
+          },
+          {
+            "name": "period_start",
+            "type": "i64"
+          },
+          {
+            "name": "period_end",
+            "type": "i64"
+          },
+          {
+            "name": "invoice_number",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
+          },
+          {
+            "name": "PastDue"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "paymentMint",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlanCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "planId",
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "intervalSeconds",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlanUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "intervalSeconds",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlanDeactivated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "periodEnd",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PaymentProcessed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "periodStart",
+            "type": "i64"
+          },
+          {
+            "name": "periodEnd",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "reason",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionCancelledEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "plan",
+            "type": "pubkey"
+          },
+          {
+            "name": "effectiveUntil",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlanChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oldSubscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "newSubscription",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "oldPlan",
+            "type": "pubkey"
+          },
+          {
+            "name": "newPlan",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit",
+            "type": "u64"
+          },
+          {
+            "name": "charge",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawalProcessed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

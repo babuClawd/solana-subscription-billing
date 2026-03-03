@@ -32,10 +32,10 @@ const RPC_URL = "https://api.devnet.solana.com";
 // ---------- IDL & Program Setup ----------
 
 function loadIdl(): anchor.Idl {
-  const idlPath = path.resolve(
-    __dirname,
-    "../target/idl/subscription_billing.json"
-  );
+  // Try committed idl/ first, then fall back to target/idl/ (local builds)
+  const idlDir = path.resolve(__dirname, "../idl/subscription_billing.json");
+  const idlTarget = path.resolve(__dirname, "../target/idl/subscription_billing.json");
+  const idlPath = fs.existsSync(idlDir) ? idlDir : idlTarget;
   return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
 }
 
