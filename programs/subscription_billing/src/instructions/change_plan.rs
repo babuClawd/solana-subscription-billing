@@ -122,10 +122,7 @@ pub fn handler(ctx: Context<ChangePlan>) -> Result<()> {
         old_sub.status == SubscriptionStatus::Active,
         BillingError::SubscriptionNotActive
     );
-    require!(
-        current_plan.key() != new_plan.key(),
-        BillingError::SamePlan
-    );
+    require!(current_plan.key() != new_plan.key(), BillingError::SamePlan);
     require!(new_plan.is_active, BillingError::PlanNotActive);
 
     if new_plan.max_subscribers > 0 {

@@ -65,7 +65,11 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         destination: ctx.accounts.destination.key(),
     });
 
-    msg!("Withdrawn {} tokens to {}", amount, ctx.accounts.destination.key());
+    msg!(
+        "Withdrawn {} tokens to {}",
+        amount,
+        ctx.accounts.destination.key()
+    );
     Ok(())
 }
 

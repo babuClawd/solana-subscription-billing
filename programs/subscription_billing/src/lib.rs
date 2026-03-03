@@ -44,7 +44,13 @@ pub mod subscription_billing {
         new_grace_period: Option<i64>,
         new_max_subscribers: Option<u64>,
     ) -> Result<()> {
-        instructions::update_plan::handler(ctx, new_price, new_interval, new_grace_period, new_max_subscribers)
+        instructions::update_plan::handler(
+            ctx,
+            new_price,
+            new_interval,
+            new_grace_period,
+            new_max_subscribers,
+        )
     }
 
     /// Deactivate a plan so no new subscriptions can be created.
