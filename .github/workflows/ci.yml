@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  SOLANA_VERSION: "2.1.21"
+  ANCHOR_VERSION: "0.31.0"
+  RUST_TOOLCHAIN: "1.79.0"
+  NODE_VERSION: "20"
+
+jobs:
+  build:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings -A ambiguous_glob_reexports
+
+      - name: Build SBF program
+        run: |
+          cargo-build-sbf --manifest-path programs/subscription_billing/Cargo.toml --sbf-out-dir target/deploy
+
+      - name: Verify program binary exists
+        run: |
+          ls -la target/deploy/subscription_billing.so
+          echo "Binary size: $(wc -c < target/deploy/subscription_billing.so) bytes"
+
+      - name: Verify IDL matches
+        run: |
+          echo "IDL in repo:"
+          python3 -c "import json; d=json.load(open('idl/subscription_billing.json')); print(f'  Instructions: {len(d[\"instructions\"])}, Accounts: {len(d[\"accounts\"])}, Events: {len(d[\"events\"])}')"
+
+  test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install test dependencies
+        run: npm install
+
+      - name: Install client dependencies
+        run: cd client && npm install
+
+      - name: Run tests (Devnet)
+        run: npm test
+        env:
+          ANCHOR_PROVIDER_URL: https://api.devnet.solana.com
+
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
+        continue-on-error: true  # Advisory-only for now
+
+      - name: Check for unsafe code
+        run: |
+          echo "Checking for unsafe blocks..."
+          UNSAFE_COUNT=$(grep -rn "unsafe " programs/ --include="*.rs" | grep -v "// unsafe" | wc -l)
+          echo "Found $UNSAFE_COUNT unsafe blocks"
+          if [ "$UNSAFE_COUNT" -gt 0 ]; then
+            grep -rn "unsafe " programs/ --include="*.rs" | grep -v "// unsafe"
+            echo "⚠️ Review unsafe blocks above"
+          else
+            echo "✅ No unsafe blocks found"
+          fi

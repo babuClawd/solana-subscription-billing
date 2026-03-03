@@ -5,7 +5,9 @@
 **Program ID:** `2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o`  
 **Network:** Devnet  
 **Deploy Tx:** [`VY8opF1hSNNA...`](https://explorer.solana.com/tx/VY8opF1hSNNAfz8TVq7QvsFjJT7nAuQhDG6sU92Mpb5LMdnzFMN84yCcssZ8rtFMRTBDvfpDKoD99X8iUS4j31f?cluster=devnet)  
-**Explorer:** [View Program](https://explorer.solana.com/address/2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o?cluster=devnet)
+**Explorer:** [View Program](https://explorer.solana.com/address/2NxEGwW787jkeK5PSFMsQxPLy1MzXv1QUpuXhmRann2o?cluster=devnet)  
+**IDL (on-chain):** [`7m8TzLB2Ja3i2h3YvAu2m6ysd6FxpujjZ9VUFj2CTKX4`](https://explorer.solana.com/address/7m8TzLB2Ja3i2h3YvAu2m6ysd6FxpujjZ9VUFj2CTKX4?cluster=devnet)  
+**CI:** [![CI](https://github.com/babuClawd/solana-subscription-billing/actions/workflows/ci.yml/badge.svg)](https://github.com/babuClawd/solana-subscription-billing/actions/workflows/ci.yml)
 
 ### Devnet Demo Transactions
 
