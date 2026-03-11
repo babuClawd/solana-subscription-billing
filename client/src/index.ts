@@ -823,4 +823,117 @@ cli
     }
   });
 
+
+// ---- renew ----
+cli
+  .command("renew")
+  .description(
+    "Process a subscription renewal payment.\n" +
+      "Transfers the plan price from your token account to the merchant treasury\n" +
+      "and advances the billing period. The subscription must be Active or PastDue,\n" +
+      "auto-renew must be enabled, and the current period must have ended."
+  )
+  .requiredOption("--merchant <pubkey>", "Merchant PDA")
+  .requiredOption("--plan <pubkey>", "Plan PDA")
+  .option("--subscription <pubkey>", "Subscription PDA (derived automatically if omitted)")
+  .action(async (opts) => {
+    try {
+      const parent = cli.opts();
+      const kp = loadKeypair(parent.keypair);
+      const conn = getConnection(parent.url);
+      const wallet = new anchor.Wallet(kp);
+      const prog = getProgram(conn, wallet);
+
+      const merchantPda = new PublicKey(opts.merchant);
+      const planPda = new PublicKey(opts.plan);
+
+      // Derive subscription PDA from plan + subscriber (current wallet), or use provided address
+      const subscriptionPda = opts.subscription
+        ? new PublicKey(opts.subscription)
+        : findSubscriptionPda(planPda, kp.publicKey)[0];
+
+      const [statsPda] = findStatsPda(merchantPda);
+
+      // Fetch subscription to compute next invoice number
+      const sub = await fetchAccountOrNull<SubscriptionAccount>(
+        accounts(prog)["subscription"],
+        subscriptionPda
+      );
+      if (!sub) {
+        console.error(`\n❌ No subscription found at: ${subscriptionPda}`);
+        console.error(`   Ensure --merchant and --plan are correct, or pass --subscription explicitly.`);
+        process.exit(1);
+      }
+
+      const statusStr = formatStatus(sub.status);
+      if ("cancelled" in sub.status) {
+        console.error(`\n❌ Subscription is ${statusStr} — cannot renew.`);
+        process.exit(1);
+      }
+
+      if (!sub.autoRenew) {
+        console.error(`\n❌ Auto-renew is disabled for this subscription.`);
+        console.error(`   Enable auto-renew before calling renew.`);
+        process.exit(1);
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const periodEnd = sub.currentPeriodEnd.toNumber();
+      if (now < periodEnd) {
+        const remaining = periodEnd - now;
+        const h = Math.floor(remaining / 3600);
+        const m = Math.floor((remaining % 3600) / 60);
+        console.error(`\n❌ Renewal not yet due.`);
+        console.error(`   Current period ends in ${h}h ${m}m (${formatTimestamp(periodEnd)}).`);
+        process.exit(1);
+      }
+
+      // Derive the invoice PDA for the next payment (payments_made is the next invoice number)
+      const nextInvoiceNumber = sub.paymentsMade.toNumber();
+      const [invoicePda] = findInvoicePda(subscriptionPda, nextInvoiceNumber);
+
+      const merchantAccount = await accounts(prog)["merchant"].fetch(merchantPda) as unknown as MerchantAccount;
+      const subscriberAta = getAssociatedTokenAddressSync(
+        merchantAccount.paymentMint,
+        kp.publicKey
+      );
+
+      console.log(`Renewing subscription...`);
+      console.log(`  Subscription: ${subscriptionPda}`);
+      console.log(`  Status:       ${statusStr}`);
+      console.log(`  Invoice #:    ${nextInvoiceNumber}`);
+      console.log(`  Invoice PDA:  ${invoicePda}`);
+
+      const tx = await prog.methods
+        .renew()
+        .accountsPartial({
+          merchant: merchantPda,
+          plan: planPda,
+          subscription: subscriptionPda,
+          invoice: invoicePda,
+          stats: statsPda,
+          subscriberTokenAccount: subscriberAta,
+          treasury: merchantAccount.treasury,
+          subscriber: kp.publicKey,
+          payer: kp.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([kp])
+        .rpc();
+
+      // Fetch updated subscription state
+      const updated = await accounts(prog)["subscription"].fetch(subscriptionPda) as unknown as SubscriptionAccount;
+
+      console.log(`\n✅ Renewal successful!`);
+      console.log(`   Tx: ${tx}`);
+      console.log(`   Explorer: ${explorerTxUrl(tx)}`);
+      console.log(`   New period end: ${formatTimestamp(updated.currentPeriodEnd.toNumber())}`);
+      console.log(`   Total payments: ${updated.paymentsMade}`);
+    } catch (err) {
+      console.error(`\n❌ Renewal failed: ${formatError(err)}`);
+      process.exit(1);
+    }
+  });
+
 cli.parse();
