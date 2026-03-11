@@ -8,6 +8,9 @@
  *   npx ts-node src/index.ts create-plan --name "Pro Monthly" --price 10000000 --interval 2592000
  *   npx ts-node src/index.ts subscribe --plan <PLAN_PUBKEY>
  *   npx ts-node src/index.ts cancel --merchant <MERCHANT_PDA> --plan <PLAN_PDA>
+ *   npx ts-node src/index.ts renew --merchant <MERCHANT_PDA> --plan <PLAN_PDA>
+ *   npx ts-node src/index.ts change-plan --current-plan <PLAN_PDA> --new-plan <PLAN_PDA>
+ *   npx ts-node src/index.ts close-subscription --plan <PLAN_PDA>
  *   npx ts-node src/index.ts withdraw --amount 5000000 --destination <TOKEN_ACCOUNT>
  *   npx ts-node src/index.ts deactivate-plan --plan <PLAN_PDA>
  *   npx ts-node src/index.ts update-plan --plan <PLAN_PDA> [--price N] [--interval N] [--grace-period N] [--max-subscribers N]
@@ -773,6 +776,129 @@ cli
       console.log(`   Explorer:            ${explorerTxUrl(tx)}`);
     } catch (err) {
       console.error(`\n❌ Failed to update plan: ${formatError(err)}`);
+      process.exit(1);
+    }
+  });
+
+// ---- change-plan ----
+cli
+  .command("change-plan")
+  .description(
+    "Switch an active subscription from one plan to another (prorated billing).\n" +
+      "Charges the difference in price for the remaining period, or applies a credit if downgrading."
+  )
+  .requiredOption("--current-plan <pubkey>", "Current plan PDA")
+  .requiredOption("--new-plan <pubkey>", "New plan PDA to switch to")
+  .action(async (opts) => {
+    try {
+      const parent = cli.opts();
+      const kp = loadKeypair(parent.keypair);
+      const conn = getConnection(parent.url);
+      const wallet = new anchor.Wallet(kp);
+      const prog = getProgram(conn, wallet);
+
+      const currentPlanPda = new PublicKey(opts.currentPlan);
+      const newPlanPda = new PublicKey(opts.newPlan);
+
+      // Fetch current plan to resolve merchant PDA
+      const currentPlan = await accounts(prog)["plan"].fetch(currentPlanPda) as unknown as PlanAccount;
+      const merchantPda = currentPlan.merchant;
+      const merchantAccount = await accounts(prog)["merchant"].fetch(merchantPda) as unknown as MerchantAccount;
+      const [statsPda] = findStatsPda(merchantPda);
+
+      // Existing subscription (on current plan)
+      const [oldSubscriptionPda] = findSubscriptionPda(currentPlanPda, kp.publicKey);
+      const oldSub = await accounts(prog)["subscription"].fetch(oldSubscriptionPda) as unknown as SubscriptionAccount;
+
+      // New subscription PDA (on new plan)
+      const [newSubscriptionPda] = findSubscriptionPda(newPlanPda, kp.publicKey);
+
+      // Invoice for the plan-change transaction (always invoice_number = 0 for new subscription)
+      const [invoicePda] = findInvoicePda(newSubscriptionPda, 0);
+
+      // Subscriber's token account
+      const subscriberAta = getAssociatedTokenAddressSync(
+        merchantAccount.paymentMint,
+        kp.publicKey
+      );
+
+      const tx = await prog.methods
+        .changePlan()
+        .accountsPartial({
+          merchant: merchantPda,
+          currentPlan: currentPlanPda,
+          newPlan: newPlanPda,
+          subscription: oldSubscriptionPda,
+          newSubscription: newSubscriptionPda,
+          invoice: invoicePda,
+          stats: statsPda,
+          subscriberTokenAccount: subscriberAta,
+          treasury: merchantAccount.treasury,
+          subscriber: kp.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([kp])
+        .rpc();
+
+      console.log(`\n✅ Plan changed.`);
+      console.log(`   Old subscription: ${oldSubscriptionPda}`);
+      console.log(`   New subscription: ${newSubscriptionPda}`);
+      console.log(`   Tx:               ${tx}`);
+      console.log(`   Explorer:         ${explorerTxUrl(tx)}`);
+    } catch (err) {
+      console.error(`\n❌ Failed to change plan: ${formatError(err)}`);
+      process.exit(1);
+    }
+  });
+
+// ---- close-subscription ----
+cli
+  .command("close-subscription")
+  .description(
+    "Close a cancelled or expired subscription account to reclaim rent SOL.\n" +
+      "Only the subscriber can close their own subscription."
+  )
+  .requiredOption("--plan <pubkey>", "Plan PDA the subscription belongs to")
+  .option(
+    "--subscription <pubkey>",
+    "Subscription PDA (derived from --plan + signer if omitted)"
+  )
+  .action(async (opts) => {
+    try {
+      const parent = cli.opts();
+      const kp = loadKeypair(parent.keypair);
+      const conn = getConnection(parent.url);
+      const wallet = new anchor.Wallet(kp);
+      const prog = getProgram(conn, wallet);
+
+      const planPda = new PublicKey(opts.plan);
+
+      // Resolve subscription PDA (explicit or derived)
+      const subscriptionPda = opts.subscription
+        ? new PublicKey(opts.subscription)
+        : findSubscriptionPda(planPda, kp.publicKey)[0];
+
+      // Fetch plan to get merchant for validation
+      const planAccount = await accounts(prog)["plan"].fetch(planPda) as unknown as PlanAccount;
+
+      const tx = await prog.methods
+        .closeSubscription()
+        .accountsPartial({
+          plan: planPda,
+          subscription: subscriptionPda,
+          merchant: planAccount.merchant,
+          subscriber: kp.publicKey,
+        })
+        .signers([kp])
+        .rpc();
+
+      console.log(`\n✅ Subscription account closed. Rent reclaimed.`);
+      console.log(`   Subscription: ${subscriptionPda}`);
+      console.log(`   Tx:           ${tx}`);
+      console.log(`   Explorer:     ${explorerTxUrl(tx)}`);
+    } catch (err) {
+      console.error(`\n❌ Failed to close subscription: ${formatError(err)}`);
       process.exit(1);
     }
   });
