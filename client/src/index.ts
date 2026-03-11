@@ -9,6 +9,8 @@
  *   npx ts-node src/index.ts subscribe --plan <PLAN_PUBKEY>
  *   npx ts-node src/index.ts cancel --merchant <MERCHANT_PDA> --plan <PLAN_PDA>
  *   npx ts-node src/index.ts withdraw --amount 5000000 --destination <TOKEN_ACCOUNT>
+ *   npx ts-node src/index.ts deactivate-plan --plan <PLAN_PDA>
+ *   npx ts-node src/index.ts update-plan --plan <PLAN_PDA> [--price N] [--interval N] [--grace-period N] [--max-subscribers N]
  *   npx ts-node src/index.ts show-merchant
  *   npx ts-node src/index.ts show-plan --plan <PLAN_PDA>
  *   npx ts-node src/index.ts show-subscription --subscription <SUB_PDA>
@@ -662,6 +664,115 @@ cli
       console.log(`  Auto-renew:  ${sub.autoRenew}`);
     } catch (err) {
       console.error(`\n❌ Failed to fetch subscription: ${formatError(err)}`);
+      process.exit(1);
+    }
+  });
+
+// ---- deactivate-plan ----
+cli
+  .command("deactivate-plan")
+  .description("Deactivate a subscription plan (merchant authority only)")
+  .requiredOption("--plan <pubkey>", "Plan PDA")
+  .action(async (opts) => {
+    try {
+      const parent = cli.opts();
+      const kp = loadKeypair(parent.keypair);
+      const conn = getConnection(parent.url);
+      const wallet = new anchor.Wallet(kp);
+      const prog = getProgram(conn, wallet);
+
+      const [merchantPda] = findMerchantPda(kp.publicKey);
+      const planPda = new PublicKey(opts.plan);
+
+      const tx = await prog.methods
+        .deactivatePlan()
+        .accountsPartial({
+          merchant: merchantPda,
+          plan: planPda,
+          authority: kp.publicKey,
+        })
+        .signers([kp])
+        .rpc();
+
+      console.log(`\n✅ Plan deactivated.`);
+      console.log(`   Plan:     ${planPda}`);
+      console.log(`   Tx:       ${tx}`);
+      console.log(`   Explorer: ${explorerTxUrl(tx)}`);
+    } catch (err) {
+      console.error(`\n❌ Failed to deactivate plan: ${formatError(err)}`);
+      process.exit(1);
+    }
+  });
+
+// ---- update-plan ----
+cli
+  .command("update-plan")
+  .description(
+    "Update mutable fields on an existing plan (merchant authority only).\n" +
+      "Pass only the fields you want to change; omitted fields are left unchanged."
+  )
+  .requiredOption("--plan <pubkey>", "Plan PDA")
+  .option("--price <tokens>", "New price in token atomic units (must be > 0)")
+  .option("--interval <seconds>", "New billing interval in seconds (must be ≥ 60)")
+  .option("--grace-period <seconds>", "New grace period in seconds (must be ≥ 0)")
+  .option("--max-subscribers <n>", "New maximum subscriber cap (0 = unlimited)")
+  .action(async (opts) => {
+    const hasAny =
+      opts.price !== undefined ||
+      opts.interval !== undefined ||
+      opts.gracePeriod !== undefined ||
+      opts.maxSubscribers !== undefined;
+    if (!hasAny) {
+      console.error(
+        "\n❌ Nothing to update — pass at least one of: --price, --interval, --grace-period, --max-subscribers"
+      );
+      process.exit(1);
+    }
+
+    try {
+      const parent = cli.opts();
+      const kp = loadKeypair(parent.keypair);
+      const conn = getConnection(parent.url);
+      const wallet = new anchor.Wallet(kp);
+      const prog = getProgram(conn, wallet);
+
+      const [merchantPda] = findMerchantPda(kp.publicKey);
+      const planPda = new PublicKey(opts.plan);
+
+      const newPrice =
+        opts.price !== undefined ? new anchor.BN(opts.price) : null;
+      const newInterval =
+        opts.interval !== undefined ? new anchor.BN(opts.interval) : null;
+      const newGracePeriod =
+        opts.gracePeriod !== undefined
+          ? new anchor.BN(opts.gracePeriod)
+          : null;
+      const newMaxSubscribers =
+        opts.maxSubscribers !== undefined
+          ? new anchor.BN(opts.maxSubscribers)
+          : null;
+
+      const tx = await prog.methods
+        .updatePlan(newPrice, newInterval, newGracePeriod, newMaxSubscribers)
+        .accountsPartial({
+          merchant: merchantPda,
+          plan: planPda,
+          authority: kp.publicKey,
+        })
+        .signers([kp])
+        .rpc();
+
+      console.log(`\n✅ Plan updated.`);
+      if (newPrice) console.log(`   New price:           ${opts.price} tokens`);
+      if (newInterval) console.log(`   New interval:        ${opts.interval}s`);
+      if (newGracePeriod)
+        console.log(`   New grace period:    ${opts.gracePeriod}s`);
+      if (newMaxSubscribers)
+        console.log(`   New max subscribers: ${opts.maxSubscribers}`);
+      console.log(`   Tx:                  ${tx}`);
+      console.log(`   Explorer:            ${explorerTxUrl(tx)}`);
+    } catch (err) {
+      console.error(`\n❌ Failed to update plan: ${formatError(err)}`);
       process.exit(1);
     }
   });
