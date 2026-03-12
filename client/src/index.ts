@@ -537,7 +537,7 @@ cli
         .signers([kp])
         .rpc();
 
-      console.log(`\n✅ Withdrawn ${opts.amount} tokens.`);
+      console.log(`\n✅ Withdrawn ${formatTokenAmount(new anchor.BN(opts.amount))} tokens.`);
       console.log(`   Tx: ${tx}`);
       console.log(`   Explorer: ${explorerTxUrl(tx)}`);
     } catch (err) {
@@ -584,7 +584,7 @@ cli
       console.log(`  Treasury:     ${merchant.treasury}`);
       console.log(`  Plans:        ${merchant.planCount}`);
       console.log(`\n--- Stats ---`);
-      console.log(`  Revenue:       ${stats.totalRevenue} tokens`);
+      console.log(`  Revenue:       ${formatTokenAmount(stats.totalRevenue)} tokens`);
       console.log(`  Active Subs:   ${stats.activeSubscribers}`);
       console.log(`  Total Subs:    ${stats.totalSubscriptions}`);
       console.log(`  Invoices:      ${stats.totalInvoices}`);
@@ -617,7 +617,7 @@ cli
       console.log(`  PDA:         ${opts.plan}`);
       console.log(`  Merchant:    ${plan.merchant}`);
       console.log(`  Plan ID:     ${plan.planId}`);
-      console.log(`  Price:       ${plan.price} tokens/cycle`);
+      console.log(`  Price:       ${formatTokenAmount(plan.price)} tokens/cycle`);
       console.log(
         `  Interval:    ${plan.intervalSeconds}s (${intervalDays} days)`
       );
