@@ -827,4 +827,209 @@ describe("Subscription Billing Program", () => {
       }
     });
   });
+
+  // ====== RENEW VALIDATION TESTS ======
+  // These tests exercise the on-chain guard conditions for the renew instruction
+  // using a fresh subscription so they don't depend on the shared subPda (which
+  // is closed by the Close Subscription suite above).
+
+  describe("Renew (validation)", () => {
+    let renewKp: anchor.web3.Keypair;
+    let renewMerchantPda: PublicKey;
+    let renewStatsPda: PublicKey;
+    let renewTreasuryPda: PublicKey;
+    let renewPlanPda: PublicKey;
+    let renewSubPda: PublicKey;
+    let renewInvoicePda: PublicKey;
+    let renewAta: PublicKey;
+
+    before(async function () {
+      this.timeout(60_000);
+
+      // Fresh keypair so these tests are independent of suite-level shared state
+      renewKp = anchor.web3.Keypair.generate();
+
+      // Airdrop SOL to fund tx fees and rent
+      const sig = await conn.requestAirdrop(
+        renewKp.publicKey,
+        2 * LAMPORTS_PER_SOL
+      );
+      await conn.confirmTransaction(sig, "confirmed");
+
+      // Derive PDAs
+      [renewMerchantPda] = findMerchantPda(renewKp.publicKey);
+      [renewStatsPda] = findStatsPda(renewMerchantPda);
+      [renewTreasuryPda] = findTreasuryPda(renewMerchantPda);
+
+      // Init merchant (reuse the suite-level mint)
+      const renewWallet = new anchor.Wallet(renewKp);
+      const renewProv = new anchor.AnchorProvider(conn, renewWallet, {
+        commitment: "confirmed",
+      });
+      const renewProg = new anchor.Program(loadIdl(), renewProv);
+
+      await renewProg.methods
+        .initializeMerchant("RenewTestMerchant")
+        .accountsPartial({
+          merchant: renewMerchantPda,
+          stats: renewStatsPda,
+          paymentMint: mint,
+          treasury: renewTreasuryPda,
+          authority: renewKp.publicKey,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([renewKp])
+        .rpc();
+
+      // Create a plan with a 1-hour interval (so period is not yet due)
+      [renewPlanPda] = findPlanPda(renewMerchantPda, 0);
+      await renewProg.methods
+        .createPlan(
+          "Renew Test Plan",
+          new anchor.BN(10_000_000), // 10 tokens
+          new anchor.BN(3600),       // 1-hour interval — won't expire in test
+          new anchor.BN(300),        // 5-minute grace period
+          null
+        )
+        .accountsPartial({
+          merchant: renewMerchantPda,
+          plan: renewPlanPda,
+          authority: renewKp.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([renewKp])
+        .rpc();
+
+      // Create a token account for renewKp and mint tokens
+      const renewAtaInfo = await getOrCreateAssociatedTokenAccount(
+        conn,
+        renewKp,
+        mint,
+        renewKp.publicKey
+      );
+      renewAta = renewAtaInfo.address;
+      await mintTo(conn, authority, mint, renewAta, authority, 100_000_000);
+
+      // Subscribe
+      [renewSubPda] = findSubscriptionPda(renewPlanPda, renewKp.publicKey);
+      [renewInvoicePda] = findInvoicePda(renewSubPda, 0);
+
+      await renewProg.methods
+        .subscribe()
+        .accountsPartial({
+          merchant: renewMerchantPda,
+          plan: renewPlanPda,
+          subscription: renewSubPda,
+          invoice: renewInvoicePda,
+          stats: renewStatsPda,
+          subscriberTokenAccount: renewAta,
+          treasury: renewTreasuryPda,
+          subscriber: renewKp.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([renewKp])
+        .rpc();
+    });
+
+    it("rejects renewal when period is not yet due", async function () {
+      this.timeout(30_000);
+
+      const renewWallet = new anchor.Wallet(renewKp);
+      const renewProv = new anchor.AnchorProvider(conn, renewWallet, {
+        commitment: "confirmed",
+      });
+      const renewProg = new anchor.Program(loadIdl(), renewProv);
+
+      // Invoice #1 (next renewal)
+      const [nextInvoicePda] = findInvoicePda(renewSubPda, 1);
+
+      try {
+        await renewProg.methods
+          .renew()
+          .accountsPartial({
+            merchant: renewMerchantPda,
+            plan: renewPlanPda,
+            subscription: renewSubPda,
+            invoice: nextInvoicePda,
+            stats: renewStatsPda,
+            subscriberTokenAccount: renewAta,
+            treasury: renewTreasuryPda,
+            subscriber: renewKp.publicKey,
+            payer: renewKp.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([renewKp])
+          .rpc();
+        assert.fail("Should have rejected renewal not yet due");
+      } catch (err: any) {
+        assert.ok(
+          err.message.includes("RenewalNotDue") ||
+            err.message.includes("not due for renewal"),
+          `Expected RenewalNotDue, got: ${err.message}`
+        );
+      }
+    });
+
+    it("rejects renewal when auto-renew is disabled", async function () {
+      this.timeout(30_000);
+
+      const renewWallet = new anchor.Wallet(renewKp);
+      const renewProv = new anchor.AnchorProvider(conn, renewWallet, {
+        commitment: "confirmed",
+      });
+      const renewProg = new anchor.Program(loadIdl(), renewProv);
+
+      // Cancel the subscription (sets auto_renew = false)
+      await renewProg.methods
+        .cancel()
+        .accountsPartial({
+          merchant: renewMerchantPda,
+          plan: renewPlanPda,
+          subscription: renewSubPda,
+          stats: renewStatsPda,
+          subscriber: renewKp.publicKey,
+        })
+        .signers([renewKp])
+        .rpc();
+
+      // Verify auto_renew is now false
+      const sub = await acct(renewProg)["subscription"].fetch(renewSubPda);
+      assert.equal(sub.autoRenew, false, "auto_renew should be false after cancel");
+
+      // Invoice #1 (next renewal)
+      const [nextInvoicePda] = findInvoicePda(renewSubPda, 1);
+
+      try {
+        await renewProg.methods
+          .renew()
+          .accountsPartial({
+            merchant: renewMerchantPda,
+            plan: renewPlanPda,
+            subscription: renewSubPda,
+            invoice: nextInvoicePda,
+            stats: renewStatsPda,
+            subscriberTokenAccount: renewAta,
+            treasury: renewTreasuryPda,
+            subscriber: renewKp.publicKey,
+            payer: renewKp.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([renewKp])
+          .rpc();
+        assert.fail("Should have rejected renewal with auto-renew disabled");
+      } catch (err: any) {
+        // The renew handler checks auto_renew before checking period — so we expect
+        // AlreadyCancelled (the error reused for auto_renew=false guard).
+        assert.ok(
+          err.message.includes("AlreadyCancelled") ||
+            err.message.includes("already been cancelled"),
+          `Expected AlreadyCancelled, got: ${err.message}`
+        );
+      }
+    });
+  });
 });
