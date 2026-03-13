@@ -1,4 +1,5 @@
 pub mod cancel;
+pub mod cancel_expired;
 pub mod change_plan;
 pub mod close_subscription;
 pub mod create_plan;
@@ -10,6 +11,7 @@ pub mod update_plan;
 pub mod withdraw;
 
 pub use cancel::*;
+pub use cancel_expired::*;
 pub use change_plan::*;
 pub use close_subscription::*;
 pub use create_plan::*;

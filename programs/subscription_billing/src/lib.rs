@@ -73,6 +73,15 @@ pub mod subscription_billing {
         instructions::cancel::handler(ctx)
     }
 
+    /// Cancel a subscription whose grace period has expired.
+    ///
+    /// Unlike `renew`, this instruction does **not** allocate an `Invoice` account,
+    /// so the payer is never charged rent for a payment that was never made.
+    /// Intended to be called by crankers / keeper services to clean up lapsed subscriptions.
+    pub fn cancel_expired(ctx: Context<CancelExpired>) -> Result<()> {
+        instructions::cancel_expired::handler(ctx)
+    }
+
     /// Change plan (upgrade/downgrade). Prorated credit applied.
     pub fn change_plan(ctx: Context<ChangePlan>) -> Result<()> {
         instructions::change_plan::handler(ctx)
