@@ -1032,4 +1032,343 @@ describe("Subscription Billing Program", () => {
       }
     });
   });
+
+  // ====== CHANGE PLAN TESTS ======
+
+  describe("Change Plan", () => {
+    let cpKp: anchor.web3.Keypair;
+    let cpProg: anchor.Program;
+    let cpMerchantPda: PublicKey;
+    let cpStatsPda: PublicKey;
+    let cpTreasuryPda: PublicKey;
+    let cpPlanA: PublicKey;
+    let cpPlanB: PublicKey;
+    let cpSubPda: PublicKey;
+    let cpInvoicePda: PublicKey;
+    let cpAta: PublicKey;
+
+    before(async function () {
+      this.timeout(90_000);
+
+      // Fresh keypair for isolated test
+      cpKp = anchor.web3.Keypair.generate();
+      const cpWallet = new anchor.Wallet(cpKp);
+      const cpProv = new anchor.AnchorProvider(conn, cpWallet, {
+        commitment: "confirmed",
+      });
+      cpProg = new anchor.Program(loadIdl(), cpProv);
+
+      // Fund the keypair
+      const sig = await conn.requestAirdrop(
+        cpKp.publicKey,
+        2 * LAMPORTS_PER_SOL
+      );
+      await conn.confirmTransaction(sig, "confirmed");
+
+      // Derive PDAs
+      [cpMerchantPda] = findMerchantPda(cpKp.publicKey);
+      [cpStatsPda] = findStatsPda(cpMerchantPda);
+      [cpTreasuryPda] = findTreasuryPda(cpMerchantPda);
+
+      // Init merchant
+      await cpProg.methods
+        .initializeMerchant("ChangePlanMerchant")
+        .accountsPartial({
+          merchant: cpMerchantPda,
+          stats: cpStatsPda,
+          paymentMint: mint,
+          treasury: cpTreasuryPda,
+          authority: cpKp.publicKey,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([cpKp])
+        .rpc();
+
+      // Create Plan A (Basic): 10 tokens, 1-hour interval
+      [cpPlanA] = findPlanPda(cpMerchantPda, 0);
+      await cpProg.methods
+        .createPlan(
+          "Basic",
+          new anchor.BN(10_000_000), // 10 tokens
+          new anchor.BN(3600), // 1 hour
+          new anchor.BN(300), // 5 min grace
+          null
+        )
+        .accountsPartial({
+          merchant: cpMerchantPda,
+          plan: cpPlanA,
+          authority: cpKp.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([cpKp])
+        .rpc();
+
+      // Create Plan B (Pro): 25 tokens, 1-hour interval
+      [cpPlanB] = findPlanPda(cpMerchantPda, 1);
+      await cpProg.methods
+        .createPlan(
+          "Pro",
+          new anchor.BN(25_000_000), // 25 tokens
+          new anchor.BN(3600), // 1 hour
+          new anchor.BN(300), // 5 min grace
+          null
+        )
+        .accountsPartial({
+          merchant: cpMerchantPda,
+          plan: cpPlanB,
+          authority: cpKp.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([cpKp])
+        .rpc();
+
+      // Mint tokens to subscriber
+      const cpAtaInfo = await getOrCreateAssociatedTokenAccount(
+        conn,
+        cpKp,
+        mint,
+        cpKp.publicKey
+      );
+      cpAta = cpAtaInfo.address;
+      await mintTo(conn, authority, mint, cpAta, authority, 200_000_000);
+
+      // Subscribe to Plan A
+      [cpSubPda] = findSubscriptionPda(cpPlanA, cpKp.publicKey);
+      [cpInvoicePda] = findInvoicePda(cpSubPda, 0);
+
+      await cpProg.methods
+        .subscribe()
+        .accountsPartial({
+          merchant: cpMerchantPda,
+          plan: cpPlanA,
+          subscription: cpSubPda,
+          invoice: cpInvoicePda,
+          stats: cpStatsPda,
+          subscriberTokenAccount: cpAta,
+          treasury: cpTreasuryPda,
+          subscriber: cpKp.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([cpKp])
+        .rpc();
+    });
+
+    it("upgrades from Basic to Pro with prorated charge", async function () {
+      this.timeout(30_000);
+
+      const balBefore = (await getAccount(conn, cpAta)).amount;
+
+      // Derive new subscription and invoice PDAs for the upgrade
+      const [newSubPda] = findSubscriptionPda(cpPlanB, cpKp.publicKey);
+      const [newInvoicePda] = findInvoicePda(newSubPda, 0);
+
+      await cpProg.methods
+        .changePlan()
+        .accountsPartial({
+          merchant: cpMerchantPda,
+          currentPlan: cpPlanA,
+          newPlan: cpPlanB,
+          subscription: cpSubPda,
+          newSubscription: newSubPda,
+          invoice: newInvoicePda,
+          stats: cpStatsPda,
+          subscriberTokenAccount: cpAta,
+          treasury: cpTreasuryPda,
+          subscriber: cpKp.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([cpKp])
+        .rpc();
+
+      // Verify old subscription is cancelled
+      const oldSub = await acct(cpProg)["subscription"].fetch(cpSubPda);
+      assert.ok(
+        "cancelled" in (oldSub.status as object),
+        "old subscription should be Cancelled"
+      );
+      assert.equal(oldSub.autoRenew, false, "old sub auto_renew should be false");
+
+      // Verify new subscription is active on Plan B
+      const newSub = await acct(cpProg)["subscription"].fetch(newSubPda);
+      assert.ok(
+        "active" in (newSub.status as object),
+        "new subscription should be Active"
+      );
+      assert.ok(
+        (newSub.plan as PublicKey).equals(cpPlanB),
+        "new sub should be on Plan B"
+      );
+      assert.equal(
+        (newSub.paymentsMade as anchor.BN).toNumber(),
+        1,
+        "new sub should have 1 payment"
+      );
+      assert.equal(newSub.autoRenew, true, "new sub auto_renew should be true");
+
+      // Verify charge: should be new_price - prorated credit from remaining time
+      // Credit is nearly full since we just subscribed (charge ≈ new_price - old_price)
+      const balAfter = (await getAccount(conn, cpAta)).amount;
+      const charged = Number(balBefore - balAfter);
+      // With nearly full remaining time, credit ≈ 10 tokens, charge ≈ 25 - 10 = 15 tokens
+      // Allow some variance from timing (prorating can lose 1-2 seconds)
+      assert.ok(
+        charged >= 14_000_000 && charged <= 16_000_000,
+        `Expected charge ~15 tokens, got ${charged / 1_000_000} tokens`
+      );
+
+      // Verify plan subscriber counts
+      const planA = await acct(cpProg)["plan"].fetch(cpPlanA);
+      assert.equal(
+        (planA.subscriberCount as anchor.BN).toNumber(),
+        0,
+        "Plan A should have 0 subscribers"
+      );
+      const planB = await acct(cpProg)["plan"].fetch(cpPlanB);
+      assert.equal(
+        (planB.subscriberCount as anchor.BN).toNumber(),
+        1,
+        "Plan B should have 1 subscriber"
+      );
+
+      // Verify invoice
+      const invoice = await acct(cpProg)["invoice"].fetch(newInvoicePda);
+      assert.ok(
+        (invoice.plan as PublicKey).equals(cpPlanB),
+        "invoice should reference Plan B"
+      );
+      assert.equal(
+        (invoice.amount as anchor.BN).toNumber(),
+        charged,
+        "invoice amount should match charge"
+      );
+
+      // Verify stats: total invoices should be 2 (subscribe + change)
+      const stats = await acct(cpProg)["merchantStats"].fetch(cpStatsPda);
+      assert.equal(
+        (stats.totalInvoices as anchor.BN).toNumber(),
+        2,
+        "should have 2 invoices total"
+      );
+    });
+
+    it("rejects changing to the same plan", async function () {
+      this.timeout(30_000);
+
+      // Create a new subscriber on Plan B to test same-plan rejection
+      const sameKp = anchor.web3.Keypair.generate();
+      const sig = await conn.requestAirdrop(
+        sameKp.publicKey,
+        2 * LAMPORTS_PER_SOL
+      );
+      await conn.confirmTransaction(sig, "confirmed");
+
+      const sameWallet = new anchor.Wallet(sameKp);
+      const sameProv = new anchor.AnchorProvider(conn, sameWallet, {
+        commitment: "confirmed",
+      });
+      const sameProg = new anchor.Program(loadIdl(), sameProv);
+
+      // Fund with tokens
+      const sameAtaInfo = await getOrCreateAssociatedTokenAccount(
+        conn,
+        sameKp,
+        mint,
+        sameKp.publicKey
+      );
+      await mintTo(conn, authority, mint, sameAtaInfo.address, authority, 100_000_000);
+
+      // Subscribe to Plan B
+      const [sameSubPda] = findSubscriptionPda(cpPlanB, sameKp.publicKey);
+      const [sameInvPda] = findInvoicePda(sameSubPda, 0);
+
+      await sameProg.methods
+        .subscribe()
+        .accountsPartial({
+          merchant: cpMerchantPda,
+          plan: cpPlanB,
+          subscription: sameSubPda,
+          invoice: sameInvPda,
+          stats: cpStatsPda,
+          subscriberTokenAccount: sameAtaInfo.address,
+          treasury: cpTreasuryPda,
+          subscriber: sameKp.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([sameKp])
+        .rpc();
+
+      // Try changing Plan B → Plan B (same plan)
+      const [newSubPda] = findSubscriptionPda(cpPlanB, sameKp.publicKey);
+      const [newInvPda] = findInvoicePda(newSubPda, 0);
+
+      try {
+        await sameProg.methods
+          .changePlan()
+          .accountsPartial({
+            merchant: cpMerchantPda,
+            currentPlan: cpPlanB,
+            newPlan: cpPlanB,
+            subscription: sameSubPda,
+            newSubscription: newSubPda,
+            invoice: newInvPda,
+            stats: cpStatsPda,
+            subscriberTokenAccount: sameAtaInfo.address,
+            treasury: cpTreasuryPda,
+            subscriber: sameKp.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([sameKp])
+          .rpc();
+        assert.fail("Should reject changing to the same plan");
+      } catch (err: any) {
+        assert.ok(
+          err.message.includes("SamePlan") ||
+            err.message.includes("same plan"),
+          `Expected SamePlan error, got: ${err.message}`
+        );
+      }
+    });
+
+    it("rejects changing plan for a cancelled subscription", async function () {
+      this.timeout(30_000);
+
+      // The original cpKp subscription on Plan A is already cancelled from the upgrade test
+      // Try to change from Plan A to Plan B again (should fail — subscription is cancelled)
+      const [newSubPda] = findSubscriptionPda(cpPlanB, cpKp.publicKey);
+      const [newInvPda] = findInvoicePda(newSubPda, 0);
+
+      try {
+        await cpProg.methods
+          .changePlan()
+          .accountsPartial({
+            merchant: cpMerchantPda,
+            currentPlan: cpPlanA,
+            newPlan: cpPlanB,
+            subscription: cpSubPda,
+            newSubscription: newSubPda,
+            invoice: newInvPda,
+            stats: cpStatsPda,
+            subscriberTokenAccount: cpAta,
+            treasury: cpTreasuryPda,
+            subscriber: cpKp.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([cpKp])
+          .rpc();
+        assert.fail("Should reject plan change for cancelled subscription");
+      } catch (err: any) {
+        assert.ok(
+          err.message.includes("SubscriptionNotActive") ||
+            err.message.includes("not active"),
+          `Expected SubscriptionNotActive, got: ${err.message}`
+        );
+      }
+    });
+  });
 });
