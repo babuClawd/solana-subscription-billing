@@ -38,6 +38,9 @@ pub enum BillingError {
     #[msg("Grace period has not expired yet")]
     GracePeriodNotExpired,
 
+    #[msg("This plan has no grace period configured")]
+    GracePeriodNotConfigured,
+
     #[msg("Insufficient funds for payment")]
     InsufficientFunds,
 

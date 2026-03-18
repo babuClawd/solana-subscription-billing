@@ -107,32 +107,17 @@ pub fn handler(ctx: Context<Renew>) -> Result<()> {
         BillingError::RenewalNotDue
     );
 
-    // Check grace period — if past grace, cancel instead
-    let grace_deadline = subscription
-        .current_period_end
-        .checked_add(plan.grace_period_seconds)
-        .ok_or(BillingError::Overflow)?;
-
-    if now > grace_deadline && plan.grace_period_seconds > 0 {
-        // Past grace period — auto-cancel
-        subscription.status = SubscriptionStatus::Cancelled;
-        subscription.auto_renew = false;
-
-        let stats = &mut ctx.accounts.stats;
-        stats.active_subscribers = stats.active_subscribers.saturating_sub(1);
-        stats.total_cancellations = stats
-            .total_cancellations
-            .checked_add(1)
+    // Grace period check — if past grace deadline, reject and tell caller to use cancel_expired.
+    // We do NOT cancel here because `init` on the invoice account would have already charged rent
+    // for an account that would be wasted.  The caller must use the `cancel_expired` instruction
+    // instead, which carries no invoice account and charges no unnecessary rent.
+    if plan.grace_period_seconds > 0 {
+        let grace_deadline = subscription
+            .current_period_end
+            .checked_add(plan.grace_period_seconds)
             .ok_or(BillingError::Overflow)?;
 
-        emit!(SubscriptionCancelled {
-            subscription: subscription.key(),
-            subscriber: subscription.subscriber,
-            reason: "Grace period expired".to_string(),
-        });
-
-        msg!("Subscription auto-cancelled: grace period expired");
-        return Ok(());
+        require!(now <= grace_deadline, BillingError::GracePeriodNotExpired);
     }
 
     // Check funds
@@ -212,11 +197,4 @@ pub struct PaymentProcessed {
     pub invoice: Pubkey,
     pub period_start: i64,
     pub period_end: i64,
-}
-
-#[event]
-pub struct SubscriptionCancelled {
-    pub subscription: Pubkey,
-    pub subscriber: Pubkey,
-    pub reason: String,
 }
