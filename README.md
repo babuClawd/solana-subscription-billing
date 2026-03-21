@@ -450,7 +450,7 @@ This program is deployed on **Devnet only** and has not been audited. Key securi
 - **State machine enforcement:** Subscriptions follow Active → PastDue → Cancelled transitions; invalid transitions are rejected
 - **Immutable invoices:** Once created, invoice data cannot be modified
 
-**Not yet implemented:** Verifiable build, on-chain IDL upload, multisig upgrade authority. These would be required before mainnet deployment.
+**Not yet implemented:** Verifiable build and multisig upgrade authority. These would be required before mainnet deployment.
 
 ---
 
