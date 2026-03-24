@@ -203,9 +203,10 @@ Merchant ["merchant", authority]
 | 5 | `subscribe` | Subscriber | Creates Subscription + first Invoice, pays first cycle |
 | 6 | `renew` | Subscriber (+ payer) | Pays next cycle, extends period, creates Invoice |
 | 7 | `cancel` | Subscriber | Disables auto-renew, marks as Cancelled |
-| 8 | `change_plan` | Subscriber | Prorated upgrade/downgrade between plans |
-| 9 | `close_subscription` | Subscriber | Reclaims rent from expired/cancelled subscription |
-| 10 | `withdraw` | Merchant authority | Transfers tokens from treasury to destination |
+| 8 | `cancel_expired` | Anyone (permissionless) | Marks `PastDue` subscriptions as Cancelled after grace period |
+| 9 | `change_plan` | Subscriber | Prorated upgrade/downgrade between plans |
+| 10 | `close_subscription` | Subscriber | Reclaims rent from expired/cancelled subscription |
+| 11 | `withdraw` | Merchant authority | Transfers tokens from treasury to destination |
 
 ### Subscription State Machine
 
@@ -219,9 +220,9 @@ Merchant ["merchant", authority]
                      │ period expires
                      ▼
                 ┌──────────┐
-                │ PastDue  │─── grace period expires ──▶ auto-cancel
+                │ PastDue  │─── grace period expires ──▶ cancel_expired()
                 └────┬─────┘
-                     │ cancel() or grace expires
+                     │ cancel() by subscriber
                      ▼
                ┌───────────┐
                │ Cancelled │──── close_subscription() ──▶ account closed
@@ -450,7 +451,7 @@ This program is deployed on **Devnet only** and has not been audited. Key securi
 - **State machine enforcement:** Subscriptions follow Active → PastDue → Cancelled transitions; invalid transitions are rejected
 - **Immutable invoices:** Once created, invoice data cannot be modified
 
-**Not yet implemented:** Verifiable build, on-chain IDL upload, multisig upgrade authority. These would be required before mainnet deployment.
+**Not yet implemented:** Verifiable build and multisig upgrade authority. These would be required before mainnet deployment.
 
 ---
 
