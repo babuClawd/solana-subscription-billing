@@ -351,7 +351,7 @@ npx ts-node src/index.ts show-subscription --subscription <SUB_PDA>
 
 ## Testing
 
-17 integration tests covering all instructions, both happy paths and error cases. Tests run against the deployed Devnet program using ephemeral keypairs.
+22 integration tests covering core and advanced lifecycle instructions (merchant setup, plan management, subscribe/cancel/renew, change-plan proration, withdraw, and close), with both happy paths and error cases. Tests run against the deployed Devnet program using ephemeral keypairs.
 
 ```bash
 # Install test dependencies (from project root)
@@ -373,6 +373,10 @@ npm test
 | **Deactivate Plan** | 2 | Plan deactivation, subscription rejection on inactive plan |
 | **Withdraw** | 2 | Treasury → destination transfer, excess withdrawal rejection |
 | **Close Subscription** | 1 | Rent reclamation + account deletion |
+| **Renew (validation)** | 2 | Rejects early renewals and renewals when auto-renew is disabled |
+| **Change Plan** | 3 | Prorated upgrade, same-plan rejection, cancelled-subscription rejection |
+
+> Note: `cancel_expired` is implemented on-chain but is not yet covered by this test file.
 
 ```
   Subscription Billing Program
@@ -402,7 +406,7 @@ npm test
     Close Subscription
       ✔ closes a cancelled subscription and reclaims rent
 
-  17 passing (21s)
+  22 passing (~25s on Devnet, varies by RPC latency)
 ```
 
 ---
@@ -416,7 +420,7 @@ solana-subscription-billing/
 │       └── src/
 │           ├── lib.rs              # Program entry, instruction routing
 │           ├── state/              # Account definitions (Merchant, Plan, Subscription, Invoice, Stats)
-│           ├── instructions/       # Instruction handlers (10 instructions)
+│           ├── instructions/       # Instruction handlers (11 instructions)
 │           └── errors/             # Custom error codes
 ├── idl/
 │   └── subscription_billing.json  # Program IDL (committed for client/test use)
